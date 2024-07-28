@@ -5,6 +5,7 @@ import face_recognition
 import mediapipe as mp
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
+import shutil
 
 # Initialize MediaPipe Face Detection
 mp_face_detection = mp.solutions.face_detection
@@ -87,9 +88,54 @@ def process_video(video_path, output_folder, nth_frame=1, max_frames_per_person=
         
     print(f"Processed video {video_name}")
 
+def detect_face(image):
+    face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5)
+    results = face_detection.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    if results.detections:
+        for detection in results.detections:
+            bboxC = detection.location_data.relative_bounding_box
+            ih, iw, _ = image.shape
+            x, y, w, h = int(bboxC.xmin * iw), int(bboxC.ymin * ih), int(bboxC.width * iw), int(bboxC.height * ih)
+            if x >= 0 and y >= 0 and (x + w) <= iw and (y + h) <= ih:
+                return True, (x, y, w, h)
+    return False, None
+
+def process_frames(input_directory, output_directory):
+    # Create the output directory if it doesn't exist
+    if not os.path.exists(output_directory):
+        os.makedirs(output_directory)
+    
+    videos = {}
+    
+    # Gather all frames by video
+    for filename in os.listdir(input_directory):
+        if filename.endswith(".png") or filename.endswith(".jpg"):
+            parts = filename.split(".")
+            video_name = ".".join(parts[:-2])
+            if video_name not in videos:
+                videos[video_name] = []
+            videos[video_name].append(filename)
+    
+    for video_name, frames in videos.items():
+        best_frame = None
+        for frame in frames:
+            image_path = os.path.join(input_directory, frame)
+            image = cv2.imread(image_path)
+            face_found, bbox = detect_face(image)
+            if face_found:
+                best_frame = frame
+                break
+        
+        # If a best frame is found, copy it to the new directory
+        if best_frame:
+            src_path = os.path.join(input_directory, best_frame)
+            dst_path = os.path.join(output_directory, best_frame)
+            shutil.copy(src_path, dst_path)
+
 def main():
     video_folder = "videos"
     output_folder = "output_frames"
+    final_output_folder = "new_frames"
     nth_frame = 10  # Analyze every nth frame
     max_frames_per_person = 5  # Capture up to 5 frames per person
     
@@ -98,6 +144,9 @@ def main():
     # Use multiprocessing to handle multiple videos in parallel
     with Pool(processes=cpu_count()) as pool:
         pool.starmap(process_video, [(os.path.join(video_folder, video_file), output_folder, nth_frame, max_frames_per_person) for video_file in video_files])
+
+    # Process frames to get the best frame per person
+    process_frames(output_folder, final_output_folder)
 
 if __name__ == "__main__":
     main()
