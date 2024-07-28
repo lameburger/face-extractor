@@ -16,3 +16,9 @@ You can install these dependencies using the provided `requirements.txt` file:
 
 ```bash
 pip install -r requirements.txt
+```
+
+Run the program by creating a "videos" folder and putting videos into the folder, and then run the following script:
+```bash
+pip install -r requirements.txt
+```
